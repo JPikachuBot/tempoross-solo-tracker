@@ -11,7 +11,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JScrollPane;
+// import javax.swing.JScrollPane; // removed (no nested scrollbar)
 import javax.swing.JCheckBox;
 import javax.swing.border.EmptyBorder;
 import net.runelite.client.ui.ColorScheme;
@@ -23,7 +23,7 @@ public class TemporossSoloTrackerPanel extends PluginPanel
     private static final Color GOLD_COLOR = new Color(242, 140, 0);
 
     // Width hint for HTML-wrapped checkbox labels (RuneLite sidebar is narrow).
-    private static final int LABEL_WRAP_PX = 180;
+    private static final int LABEL_WRAP_PX = 145;
 
     private final JButton resetButton;
     private final JPanel content;
@@ -67,10 +67,9 @@ public class TemporossSoloTrackerPanel extends PluginPanel
         buildChecklist(state);
         updateActiveStepHighlight();
 
-        JScrollPane scrollPane = new JScrollPane(content);
-        scrollPane.setBorder(null);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-        add(scrollPane, BorderLayout.CENTER);
+        // RuneLite already provides scrolling for sidebar panels.
+        // Adding our own JScrollPane causes nested/double scrollbars.
+        add(content, BorderLayout.CENTER);
     }
 
     public void setOnReset(Runnable onReset)
@@ -94,6 +93,11 @@ public class TemporossSoloTrackerPanel extends PluginPanel
     public void resetChecklist()
     {
         handleReset();
+    }
+
+    public TrackerState getTrackerState()
+    {
+        return trackerState;
     }
 
     private void buildChecklist(TrackerState state)

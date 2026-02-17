@@ -2,7 +2,9 @@ package com.temporosstracker;
 
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import javax.inject.Inject;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -56,7 +58,9 @@ public class TemporossSoloTrackerPlugin extends Plugin
     private NavigationButton navButton;
 
     private boolean wasInFightRegion = false;
-    private int notifyCooldownRemaining = 0;
+
+    // Track which phases we've already warned in for the current fight.
+    private final Set<Integer> warnedPhasesThisFight = new HashSet<>();
 
     @Provides
     TemporossSoloTrackerConfig provideConfig(ConfigManager configManager)
@@ -72,7 +76,10 @@ public class TemporossSoloTrackerPlugin extends Plugin
         TrackerState trackerState = TrackerState.deserialize(serialized, checklist);
         panel = new TemporossSoloTrackerPanel(checklist, trackerState);
         panel.setOnStateChange(this::persistState);
-        panel.setOnReset(() -> persistState(trackerState));
+        panel.setOnReset(() -> {
+            persistState(trackerState);
+            warnedPhasesThisFight.clear();
+        });
 
         BufferedImage icon = ImageUtil.loadImageResource(getClass(), "icon.png");
         navButton = NavigationButton.builder()
@@ -86,7 +93,7 @@ public class TemporossSoloTrackerPlugin extends Plugin
 
         // Initialize region tracking so we don't auto-reset if the plugin is enabled mid-fight.
         wasInFightRegion = isInFightRegion();
-        notifyCooldownRemaining = 0;
+        warnedPhasesThisFight.clear();
     }
 
     @Override
@@ -116,45 +123,51 @@ public class TemporossSoloTrackerPlugin extends Plugin
         boolean inFight = isInFightRegion();
         if (config.autoReset() && inFight && !wasInFightRegion)
         {
+            warnedPhasesThisFight.clear();
             if (panel != null)
             {
                 panel.resetChecklist();
             }
         }
+        else if (!inFight && wasInFightRegion)
+        {
+            // Leaving the fight clears warning state.
+            warnedPhasesThisFight.clear();
+        }
         wasInFightRegion = inFight;
 
-        // --- Storm intensity warning (only during the fight region) ---
-        if (inFight && config.notifyAt92())
+        // --- Storm intensity warning (notify once per relevant phase) ---
+        if (!inFight || !config.notifyAt92() || panel == null)
         {
-            int stormIntensity = readStormIntensityPercent();
-            if (stormIntensity >= 92)
-            {
-                if (notifyCooldownRemaining <= 0)
-                {
-                    String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
-                    // RuneLite chat supports <col=...> tags.
-                    // Sending a GAMEMESSAGE also respects RuneLite's global "Game message notifications" setting.
-                    String chat = "<col=ff3d00>⚠ " + plain + "</col>";
-                    client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", chat, null);
+            return;
+        }
 
-                    notifyCooldownRemaining = Math.max(1, config.notifyCooldownTicks());
-                }
-                else
-                {
-                    notifyCooldownRemaining--;
-                }
-            }
-            else
-            {
-                // Reset cooldown when storm drops below threshold.
-                notifyCooldownRemaining = 0;
-            }
-        }
-        else
+        TrackerState trackerState = panel.getTrackerState();
+        int activeIndex = trackerState.getActiveStepIndex();
+        PhaseStep activeStep = trackerState.getStep(activeIndex);
+
+        // Only warn on the specific checklist steps marked as warning steps.
+        if (!activeStep.isWarning())
         {
-            // If we aren't in the fight region, don't spam reminders based on stale HUD values.
-            notifyCooldownRemaining = 0;
+            return;
         }
+
+        int phaseNumber = activeStep.getPhaseNumber();
+        if (warnedPhasesThisFight.contains(phaseNumber))
+        {
+            return;
+        }
+
+        int stormIntensity = readStormIntensityPercent();
+        if (stormIntensity < 92)
+        {
+            return;
+        }
+
+        String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
+        String chat = "<col=ff3d00>⚠ " + plain + "</col>";
+        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", chat, null);
+        warnedPhasesThisFight.add(phaseNumber);
     }
 
     private boolean isInFightRegion()
