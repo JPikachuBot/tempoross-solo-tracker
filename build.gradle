@@ -1,0 +1,41 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.temporosstracker'
+version = '0.1.0-SNAPSHOT'
+
+def runeliteVersion = project.findProperty('runeliteVersion') ?: 'latest.release'
+
+repositories {
+    mavenLocal()
+    maven {
+        url = 'https://repo.runelite.net'
+        content {
+            includeGroupByRegex "net\\.runelite.*"
+        }
+    }
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly "net.runelite:client:${runeliteVersion}"
+
+    testImplementation "net.runelite:client:${runeliteVersion}"
+    testImplementation "net.runelite:jshell:${runeliteVersion}"
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release.set(11)
+}
+
+tasks.register('run', JavaExec) {
+    group = 'run'
+    description = 'Run the plugin in RuneLite (developer mode)'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'net.runelite.client.RuneLite'
+    args = ['--developer-mode']
+}
