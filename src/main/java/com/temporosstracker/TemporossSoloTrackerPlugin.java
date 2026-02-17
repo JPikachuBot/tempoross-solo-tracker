@@ -4,9 +4,10 @@ import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.util.List;
 import javax.inject.Inject;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
-import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.widgets.Widget;
 import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -26,13 +27,14 @@ public class TemporossSoloTrackerPlugin extends Plugin
     private static final String CONFIG_GROUP = "tempoross-solo-tracker";
     private static final String CHECKLIST_STATE_KEY = "checklistState";
 
-    // TODO (Appendix A): Replace placeholders with verified region IDs.
-    private static final int TEMPOROSS_LOBBY_REGION_ID = 12078;
-    private static final int TEMPOROSS_FIGHT_REGION_ID = 12588;
+    // Verified region IDs (Jackson, 2026-02-17)
+    private static final int TEMPOROSS_LOBBY_REGION_ID = 12588;
+    private static final int TEMPOROSS_FIGHT_REGION_ID = 12076;
 
-    // TODO (Appendix B/C): Replace placeholders with verified widget/var IDs.
-    private static final int STORM_INTENSITY_WIDGET_GROUP_ID = -1;
-    private static final int STORM_INTENSITY_WIDGET_CHILD_ID = -1;
+    // Verified (Jackson, 2026-02-17): Widget group 437, child 23 has text like "Storm intensity: 86%".
+    // Prefer a varbit/varp later if we find it, but widget is good enough.
+    private static final int STORM_INTENSITY_WIDGET_GROUP_ID = 437;
+    private static final int STORM_INTENSITY_WIDGET_CHILD_ID = 23;
     private static final int STORM_INTENSITY_VARPLAYER_ID = -1;
     private static final int STORM_INTENSITY_VARBIT_ID = -1;
 
@@ -48,8 +50,14 @@ public class TemporossSoloTrackerPlugin extends Plugin
     @Inject
     private ConfigManager configManager;
 
+    @Inject
+    private TemporossSoloTrackerConfig config;
+
     private TemporossSoloTrackerPanel panel;
     private NavigationButton navButton;
+
+    private boolean wasInFightRegion = false;
+    private int notifyCooldownRemaining = 0;
 
     @Provides
     TemporossSoloTrackerConfig provideConfig(ConfigManager configManager)
@@ -76,6 +84,10 @@ public class TemporossSoloTrackerPlugin extends Plugin
             .build();
 
         clientToolbar.addNavigation(navButton);
+
+        // Initialize region tracking so we don't auto-reset if the plugin is enabled mid-fight.
+        wasInFightRegion = isInFightRegion();
+        notifyCooldownRemaining = 0;
     }
 
     @Override
@@ -101,15 +113,96 @@ public class TemporossSoloTrackerPlugin extends Plugin
     @Subscribe
     public void onGameTick(GameTick event)
     {
-        // TODO: Implement storm intensity tracking + notifications.
-        // TEMPORARY DEBUG — REMOVE AFTER VERIFYING REGION IDS
-        // client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Region ID: "
-        //     + client.getLocalPlayer().getWorldLocation().getRegionID(), null);
+        // --- Auto-reset on entering fight region (new game) ---
+        boolean inFight = isInFightRegion();
+        if (config.autoReset() && inFight && !wasInFightRegion)
+        {
+            if (panel != null)
+            {
+                panel.resetChecklist();
+            }
+        }
+        wasInFightRegion = inFight;
+
+        // --- Storm intensity warning (optional; compiles even when unknown) ---
+        int stormIntensity = readStormIntensityPercent();
+        if (stormIntensity >= 92 && config.notifyAt92())
+        {
+            if (notifyCooldownRemaining <= 0)
+            {
+                String plain = "⚠ Storm intensity at " + stormIntensity + "%! Wait before filling cannon!";
+                // Always show an in-client warning in chat.
+                // RuneLite chat supports <col=...> tags.
+                String chat = "<col=ff3d00>" + plain + "</col>";
+                client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", chat, null);
+
+                // Desktop notification: will only show if the user has RuneLite notifications enabled.
+                notifier.notify(plain);
+
+                notifyCooldownRemaining = Math.max(1, config.notifyCooldownTicks());
+            }
+            else
+            {
+                notifyCooldownRemaining--;
+            }
+        }
+        else
+        {
+            notifyCooldownRemaining = 0;
+        }
     }
 
-    @Subscribe
-    public void onGameStateChanged(GameStateChanged event)
+    private boolean isInFightRegion()
     {
-        // TODO: Implement auto-reset based on region transitions.
+        if (client == null || client.getLocalPlayer() == null)
+        {
+            return false;
+        }
+        return client.getLocalPlayer().getWorldLocation().getRegionID() == TEMPOROSS_FIGHT_REGION_ID;
+    }
+
+    /**
+     * Returns storm intensity percent, or -1 if not yet wired.
+     */
+    private int readStormIntensityPercent()
+    {
+        // VarBit is preferred if known
+        if (STORM_INTENSITY_VARBIT_ID != -1)
+        {
+            return client.getVarbitValue(STORM_INTENSITY_VARBIT_ID);
+        }
+
+        // VarPlayer fallback
+        if (STORM_INTENSITY_VARPLAYER_ID != -1)
+        {
+            return client.getVarpValue(STORM_INTENSITY_VARPLAYER_ID);
+        }
+
+        // Widget fallback (parse something like "45%")
+        if (STORM_INTENSITY_WIDGET_GROUP_ID != -1 && STORM_INTENSITY_WIDGET_CHILD_ID != -1)
+        {
+            Widget widget = client.getWidget(STORM_INTENSITY_WIDGET_GROUP_ID, STORM_INTENSITY_WIDGET_CHILD_ID);
+            if (widget != null)
+            {
+                String text = widget.getText();
+                if (text != null)
+                {
+                    text = text.replace("%", "").replaceAll("[^0-9]", "");
+                    if (!text.isEmpty())
+                    {
+                        try
+                        {
+                            return Integer.parseInt(text);
+                        }
+                        catch (NumberFormatException ignored)
+                        {
+                            // fall through
+                        }
+                    }
+                }
+            }
+        }
+
+        return -1;
     }
 }

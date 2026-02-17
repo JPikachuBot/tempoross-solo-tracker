@@ -22,6 +22,9 @@ public class TemporossSoloTrackerPanel extends PluginPanel
     private static final Color ACTIVE_STEP_COLOR = new Color(255, 253, 231);
     private static final Color WARNING_COLOR = new Color(242, 140, 0);
 
+    // Width hint for HTML-wrapped checkbox labels (RuneLite sidebar is narrow).
+    private static final int LABEL_WRAP_PX = 180;
+
     private final JButton resetButton;
     private final JPanel content;
     private final TrackerState trackerState;
@@ -85,6 +88,14 @@ public class TemporossSoloTrackerPanel extends PluginPanel
         return resetButton;
     }
 
+    /**
+     * Programmatic reset (used by the plugin when auto-reset triggers).
+     */
+    public void resetChecklist()
+    {
+        handleReset();
+    }
+
     private void buildChecklist(TrackerState state)
     {
         int currentPhase = -1;
@@ -98,7 +109,7 @@ public class TemporossSoloTrackerPanel extends PluginPanel
                 content.add(createPhaseHeader(step.getPhaseName(), phaseOptional));
             }
 
-            JCheckBox checkbox = new JCheckBox(step.getLabel(), step.isChecked());
+            JCheckBox checkbox = new JCheckBox(formatLabel(step.getLabel(), step.isChecked()), step.isChecked());
             checkbox.setAlignmentX(LEFT_ALIGNMENT);
             checkbox.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
             checkbox.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -236,13 +247,18 @@ public class TemporossSoloTrackerPanel extends PluginPanel
 
     private String formatLabel(String labelText, boolean checked)
     {
+        String safe = escapeHtml(labelText);
+
+        // HTML makes Swing wrap text for checkboxes/labels when given a width.
+        // Use a div width so long instructions don't run off the panel.
         if (!checked)
         {
-            return labelText;
+            return "<html><div style='width:" + LABEL_WRAP_PX + "px'>" + safe + "</div></html>";
         }
-        return "<html><span style='text-decoration: line-through;'>"
-            + escapeHtml(labelText)
-            + "</span></html>";
+
+        return "<html><div style='width:" + LABEL_WRAP_PX + "px'><span style='text-decoration: line-through;'>"
+            + safe
+            + "</span></div></html>";
     }
 
     private String escapeHtml(String text)

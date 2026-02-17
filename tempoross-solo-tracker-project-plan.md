@@ -131,18 +131,17 @@ public class PhaseStep {
 
 ### 2. Auto-Reset on New Game
 
-- **Detection method**: Subscribe to `GameStateChanged` and check region IDs.
-  - Tempoross lobby/waiting area region: `12078` (verify — see **Appendix A** for how to find the real value)
-  - Tempoross island fight region: `12588` (verify — see **Appendix A** for how to find the real value)
-  - **IMPORTANT**: The developer implementing this MUST verify the exact region IDs. See **Appendix A: How to Find Tempoross Region IDs** for step-by-step instructions.
+- **Detection method**: Check the local player's region ID.
+  - Tempoross lobby/waiting area region: `12588` (**verified**, Jackson, 2026-02-17)
+  - Tempoross island fight region: `12076` (**verified**, Jackson, 2026-02-17)
 - **Trigger**: When the player enters the Tempoross fight region AND the previous state was NOT in the fight region → reset all checkboxes.
 - Edge case: Don't reset if the player is already on the island (e.g., sidebar opened mid-game).
 
 ### 3. Storm Intensity Monitoring & Notifications
 
-- **Source**: The storm intensity percentage is displayed in a RuneLite widget/varp during the Tempoross encounter.
-  - Widget group ID and child ID need to be identified. See **Appendix B: How to Find the Storm Intensity Widget ID** for step-by-step instructions.
-  - Alternative: There may be a VarPlayer or VarBit that tracks storm intensity. See **Appendix C: How to Check VarPlayer/VarBit Values** for instructions.
+- **Source (verified)**: Storm intensity is available from a RuneLite widget during the Tempoross encounter.
+  - Widget: **group 437, child 23** (text like `Storm intensity: 86%`) — verified by Jackson (2026-02-17)
+  - Alternative (preferred if found later): VarPlayer/VarBit; see Appendix C.
 - **Behavior**:
   - On every game tick (`onGameTick`), read the storm intensity value.
   - If intensity ≥ 92%:
@@ -260,7 +259,9 @@ The implementing developer needs to research and verify (see Appendices A–C fo
 
 ## Appendix A: How to Find Tempoross Region IDs (Step-by-Step)
 
-> **Why this is needed**: The plugin uses region IDs to detect when you enter a new Tempoross game and auto-reset the checklist. The IDs in this plan (`12078` for lobby, `12588` for fight) are best guesses and MUST be verified.
+> **Status (verified)**: Region IDs have been verified in-game.
+> - Lobby / waiting room region ID: `12588` (Jackson, 2026-02-17)
+> - Fight / island region ID: `12076` (Jackson, 2026-02-17)
 
 ### What You'll Need
 - RuneLite client (installed and logged in)
@@ -305,9 +306,8 @@ The implementing developer needs to research and verify (see Appendices A–C fo
    - **Write it down.**
 
 8. **Update the plugin code**:
-   - Replace the placeholder values (`12078` and `12588`) in `TemporossSoloTrackerPlugin.java` with the real values you wrote down.
-   - Remove the temporary debug `addChatMessage` line.
-   - Recompile.
+   - `TemporossSoloTrackerPlugin.java` has been updated to the verified values (`12588` lobby, `12076` fight).
+   - If you ever re-verify and find different values, update those constants and recompile.
 
 ### What to Tell Claude Code
 After you have the region IDs, tell Claude Code:
