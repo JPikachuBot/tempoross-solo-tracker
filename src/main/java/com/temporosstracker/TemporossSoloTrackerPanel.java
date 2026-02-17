@@ -5,6 +5,7 @@ import java.awt.Color;
 import java.awt.Font;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -26,6 +27,7 @@ public class TemporossSoloTrackerPanel extends PluginPanel
     private final TrackerState trackerState;
     private final List<StepRow> stepRows = new ArrayList<>();
     private Runnable onReset;
+    private Consumer<TrackerState> onStateChange;
 
     public TemporossSoloTrackerPanel()
     {
@@ -73,6 +75,11 @@ public class TemporossSoloTrackerPanel extends PluginPanel
         this.onReset = onReset;
     }
 
+    public void setOnStateChange(Consumer<TrackerState> onStateChange)
+    {
+        this.onStateChange = onStateChange;
+    }
+
     public JButton getResetButton()
     {
         return resetButton;
@@ -112,6 +119,10 @@ public class TemporossSoloTrackerPanel extends PluginPanel
             checkbox.addActionListener(event -> {
                 trackerState.setChecked(stepIndex, checkbox.isSelected());
                 updateActiveStepHighlight();
+                if (onStateChange != null)
+                {
+                    onStateChange.accept(trackerState);
+                }
             });
 
             stepRows.add(new StepRow(stepIndex, row, checkbox));

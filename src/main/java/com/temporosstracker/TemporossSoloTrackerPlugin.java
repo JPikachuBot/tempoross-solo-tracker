@@ -2,6 +2,7 @@ package com.temporosstracker;
 
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
+import java.util.List;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.events.GameStateChanged;
@@ -22,6 +23,9 @@ import net.runelite.client.util.ImageUtil;
 )
 public class TemporossSoloTrackerPlugin extends Plugin
 {
+    private static final String CONFIG_GROUP = "tempoross-solo-tracker";
+    private static final String CHECKLIST_STATE_KEY = "checklistState";
+
     // TODO (Appendix A): Replace placeholders with verified region IDs.
     private static final int TEMPOROSS_LOBBY_REGION_ID = 12078;
     private static final int TEMPOROSS_FIGHT_REGION_ID = 12588;
@@ -56,7 +60,12 @@ public class TemporossSoloTrackerPlugin extends Plugin
     @Override
     protected void startUp()
     {
-        panel = new TemporossSoloTrackerPanel();
+        List<PhaseStep> checklist = ChecklistDefinition.createChecklist();
+        String serialized = configManager.getConfiguration(CONFIG_GROUP, CHECKLIST_STATE_KEY);
+        TrackerState trackerState = TrackerState.deserialize(serialized, checklist);
+        panel = new TemporossSoloTrackerPanel(checklist, trackerState);
+        panel.setOnStateChange(this::persistState);
+        panel.setOnReset(() -> persistState(trackerState));
 
         BufferedImage icon = ImageUtil.loadImageResource(getClass(), "icon.png");
         navButton = NavigationButton.builder()
@@ -78,6 +87,15 @@ public class TemporossSoloTrackerPlugin extends Plugin
             navButton = null;
         }
         panel = null;
+    }
+
+    private void persistState(TrackerState state)
+    {
+        if (state == null)
+        {
+            return;
+        }
+        configManager.setConfiguration(CONFIG_GROUP, CHECKLIST_STATE_KEY, state.serialize());
     }
 
     @Subscribe
