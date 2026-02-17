@@ -8,7 +8,6 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.widgets.Widget;
-import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -44,8 +43,8 @@ public class TemporossSoloTrackerPlugin extends Plugin
     @Inject
     private ClientToolbar clientToolbar;
 
-    @Inject
-    private Notifier notifier;
+    // Note: we rely on RuneLite's "Game message notifications" setting by emitting a GAMEMESSAGE,
+    // instead of calling Notifier directly (prevents double notifications).
 
     @Inject
     private ConfigManager configManager;
@@ -124,30 +123,36 @@ public class TemporossSoloTrackerPlugin extends Plugin
         }
         wasInFightRegion = inFight;
 
-        // --- Storm intensity warning (optional; compiles even when unknown) ---
-        int stormIntensity = readStormIntensityPercent();
-        if (stormIntensity >= 92 && config.notifyAt92())
+        // --- Storm intensity warning (only during the fight region) ---
+        if (inFight && config.notifyAt92())
         {
-            if (notifyCooldownRemaining <= 0)
+            int stormIntensity = readStormIntensityPercent();
+            if (stormIntensity >= 92)
             {
-                String plain = "⚠ Storm intensity at " + stormIntensity + "%! Wait before filling cannon!";
-                // Always show an in-client warning in chat.
-                // RuneLite chat supports <col=...> tags.
-                String chat = "<col=ff3d00>" + plain + "</col>";
-                client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", chat, null);
+                if (notifyCooldownRemaining <= 0)
+                {
+                    String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
+                    // RuneLite chat supports <col=...> tags.
+                    // Sending a GAMEMESSAGE also respects RuneLite's global "Game message notifications" setting.
+                    String chat = "<col=ff3d00>⚠ " + plain + "</col>";
+                    client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", chat, null);
 
-                // Desktop notification: will only show if the user has RuneLite notifications enabled.
-                notifier.notify(plain);
-
-                notifyCooldownRemaining = Math.max(1, config.notifyCooldownTicks());
+                    notifyCooldownRemaining = Math.max(1, config.notifyCooldownTicks());
+                }
+                else
+                {
+                    notifyCooldownRemaining--;
+                }
             }
             else
             {
-                notifyCooldownRemaining--;
+                // Reset cooldown when storm drops below threshold.
+                notifyCooldownRemaining = 0;
             }
         }
         else
         {
+            // If we aren't in the fight region, don't spam reminders based on stale HUD values.
             notifyCooldownRemaining = 0;
         }
     }

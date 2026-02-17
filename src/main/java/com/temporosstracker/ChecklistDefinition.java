@@ -27,7 +27,7 @@ public final class ChecklistDefinition
         addPhase(steps, 2, "Phase 2 — Prep and First Damage Phase", new String[]
         {
             "Fish full inventory; utilize double spot as much as possible",
-            "Cook full inventory — Storm intensity must stay ≤93%!",
+            "Cook full inventory — storm intensity must stay below 93%!",
             "Fill cannon (full inventory)",
             "Damage Tempoross to ~60%"
         }, false, new int[] {2});
@@ -40,7 +40,7 @@ public final class ChecklistDefinition
         addPhase(steps, 4, "Phase 3 — Full Inventory and Second Damage Phase", new String[]
         {
             "Fish full inventory",
-            "Cook full inventory — Storm intensity must stay ≤93%!",
+            "Cook full inventory — storm intensity must stay below 93%!",
             "Fill cannon (full inventory)",
             "Damage Tempoross to ~30%"
         }, false, new int[] {2});

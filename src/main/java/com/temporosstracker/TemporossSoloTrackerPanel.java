@@ -20,7 +20,7 @@ import net.runelite.client.ui.PluginPanel;
 public class TemporossSoloTrackerPanel extends PluginPanel
 {
     private static final Color ACTIVE_STEP_COLOR = new Color(255, 253, 231);
-    private static final Color WARNING_COLOR = new Color(242, 140, 0);
+    private static final Color GOLD_COLOR = new Color(242, 140, 0);
 
     // Width hint for HTML-wrapped checkbox labels (RuneLite sidebar is narrow).
     private static final int LABEL_WRAP_PX = 180;
@@ -140,7 +140,7 @@ public class TemporossSoloTrackerPanel extends PluginPanel
     {
         JLabel header = new JLabel(optional ? phaseName + " (Optional)" : phaseName);
         header.setAlignmentX(LEFT_ALIGNMENT);
-        header.setForeground(optional ? ColorScheme.MEDIUM_GRAY_COLOR : ColorScheme.LIGHT_GRAY_COLOR);
+        header.setForeground(GOLD_COLOR);
         Font baseFont = header.getFont().deriveFont(Font.BOLD, 13f);
         if (optional)
         {
@@ -198,7 +198,8 @@ public class TemporossSoloTrackerPanel extends PluginPanel
             }
             else if (row.isWarning)
             {
-                row.checkbox.setForeground(WARNING_COLOR);
+                // Keep same color as other steps; just bold to emphasize.
+                row.checkbox.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
                 row.checkbox.setFont(row.baseFont.deriveFont(Font.BOLD));
             }
             else
