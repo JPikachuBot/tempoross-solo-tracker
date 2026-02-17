@@ -7,6 +7,7 @@ import java.util.List;
 public class TrackerState
 {
     private final List<PhaseStep> steps;
+    private Integer lastToggledIndex;
 
     private TrackerState(List<PhaseStep> steps)
     {
@@ -59,38 +60,35 @@ public class TrackerState
 
     public int getActiveStepIndex()
     {
-        int firstOptionalUnchecked = -1;
-        for (int i = 0; i < steps.size(); i++)
+        if (lastToggledIndex != null)
         {
-            PhaseStep step = steps.get(i);
-            if (step.isChecked())
+            int nextRequiredAfter = findNextUncheckedRequiredAfter(lastToggledIndex);
+            if (nextRequiredAfter != -1)
             {
-                continue;
-            }
-
-            if (!step.isOptional())
-            {
-                return i;
-            }
-
-            if (firstOptionalUnchecked == -1)
-            {
-                firstOptionalUnchecked = i;
+                return nextRequiredAfter;
             }
         }
-        return firstOptionalUnchecked;
+
+        int firstRequiredUnchecked = findFirstUncheckedRequired();
+        if (firstRequiredUnchecked != -1)
+        {
+            return firstRequiredUnchecked;
+        }
+        return findFirstUncheckedOptional();
     }
 
     public void setChecked(int index, boolean checked)
     {
         PhaseStep step = getStep(index);
         step.setChecked(checked);
+        lastToggledIndex = index;
     }
 
     public void toggleStep(int index)
     {
         PhaseStep step = getStep(index);
         step.setChecked(!step.isChecked());
+        lastToggledIndex = index;
     }
 
     public void reset()
@@ -99,6 +97,46 @@ public class TrackerState
         {
             step.setChecked(false);
         }
+        lastToggledIndex = null;
+    }
+
+    private int findFirstUncheckedRequired()
+    {
+        for (int i = 0; i < steps.size(); i++)
+        {
+            PhaseStep step = steps.get(i);
+            if (!step.isChecked() && !step.isOptional())
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int findFirstUncheckedOptional()
+    {
+        for (int i = 0; i < steps.size(); i++)
+        {
+            PhaseStep step = steps.get(i);
+            if (!step.isChecked() && step.isOptional())
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int findNextUncheckedRequiredAfter(int index)
+    {
+        for (int i = index + 1; i < steps.size(); i++)
+        {
+            PhaseStep step = steps.get(i);
+            if (!step.isChecked() && !step.isOptional())
+            {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static List<Boolean> parseSerialized(String raw, int expectedSize)
