@@ -96,11 +96,6 @@ public class TemporossSoloTrackerPanel extends PluginPanel
             checkbox.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
             checkbox.setBackground(ColorScheme.DARK_GRAY_COLOR);
             checkbox.setOpaque(false);
-            if (isWarningStep(step))
-            {
-                checkbox.setForeground(WARNING_COLOR);
-                checkbox.setFont(checkbox.getFont().deriveFont(Font.BOLD));
-            }
 
             JPanel row = new JPanel(new BorderLayout());
             row.setAlignmentX(LEFT_ALIGNMENT);
@@ -114,7 +109,7 @@ public class TemporossSoloTrackerPanel extends PluginPanel
                 updateActiveStepHighlight();
             });
 
-            stepRows.add(new StepRow(stepIndex, row, checkbox));
+            stepRows.add(new StepRow(stepIndex, row, checkbox, step.getLabel(), checkbox.getFont(), step.isWarning()));
             content.add(row);
         }
     }
@@ -170,7 +165,25 @@ public class TemporossSoloTrackerPanel extends PluginPanel
             boolean isActive = row.index == activeIndex;
             row.panel.setBackground(isActive ? ACTIVE_STEP_COLOR : ColorScheme.DARK_GRAY_COLOR);
             row.panel.setOpaque(true);
-            row.checkbox.setSelected(trackerState.getStep(row.index).isChecked());
+            PhaseStep step = trackerState.getStep(row.index);
+            boolean checked = step.isChecked();
+            row.checkbox.setSelected(checked);
+            row.checkbox.setText(formatLabel(row.labelText, checked));
+            if (checked)
+            {
+                row.checkbox.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+                row.checkbox.setFont(row.baseFont);
+            }
+            else if (row.isWarning)
+            {
+                row.checkbox.setForeground(WARNING_COLOR);
+                row.checkbox.setFont(row.baseFont.deriveFont(Font.BOLD));
+            }
+            else
+            {
+                row.checkbox.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+                row.checkbox.setFont(row.baseFont);
+            }
         }
         content.revalidate();
         content.repaint();
@@ -195,12 +208,36 @@ public class TemporossSoloTrackerPanel extends PluginPanel
         private final int index;
         private final JPanel panel;
         private final JCheckBox checkbox;
+        private final String labelText;
+        private final Font baseFont;
+        private final boolean isWarning;
 
-        private StepRow(int index, JPanel panel, JCheckBox checkbox)
+        private StepRow(int index, JPanel panel, JCheckBox checkbox, String labelText, Font baseFont, boolean isWarning)
         {
             this.index = index;
             this.panel = panel;
             this.checkbox = checkbox;
+            this.labelText = labelText;
+            this.baseFont = baseFont;
+            this.isWarning = isWarning;
         }
+    }
+
+    private String formatLabel(String labelText, boolean checked)
+    {
+        if (!checked)
+        {
+            return labelText;
+        }
+        return "<html><span style='text-decoration: line-through;'>"
+            + escapeHtml(labelText)
+            + "</span></html>";
+    }
+
+    private String escapeHtml(String text)
+    {
+        return text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;");
     }
 }
