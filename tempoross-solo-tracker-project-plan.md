@@ -140,7 +140,7 @@ public class PhaseStep {
 ### 3. Storm Intensity Monitoring & Notifications
 
 - **Source (verified)**: Storm intensity is available from a RuneLite widget during the Tempoross encounter.
-  - Widget: **group 437, child 23** (text like `Storm intensity: 86%`) — verified by Jackson (2026-02-17)
+  - Widget: **group 437, child 55** (text like `Storm intensity: 86%`) — verified by Jackson (2026-02-17)
   - Alternative (preferred if found later): VarPlayer/VarBit; see Appendix C.
 - **Behavior**:
   - On every game tick (`onGameTick`), read the storm intensity value.

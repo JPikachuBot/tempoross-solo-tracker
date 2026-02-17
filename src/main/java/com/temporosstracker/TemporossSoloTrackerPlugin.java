@@ -31,10 +31,10 @@ public class TemporossSoloTrackerPlugin extends Plugin
     private static final int TEMPOROSS_LOBBY_REGION_ID = 12588;
     private static final int TEMPOROSS_FIGHT_REGION_ID = 12076;
 
-    // Verified (Jackson, 2026-02-17): Widget group 437, child 23 has text like "Storm intensity: 86%".
-    // Prefer a varbit/varp later if we find it, but widget is good enough.
+    // Verified (Jackson, 2026-02-17): Tempoross HUD widgets are in group 437.
+    // The readable text (e.g. "Storm intensity: 86%") appears on child 55 (STORM_INTENSITY_TITLE).
     private static final int STORM_INTENSITY_WIDGET_GROUP_ID = 437;
-    private static final int STORM_INTENSITY_WIDGET_CHILD_ID = 23;
+    private static final int STORM_INTENSITY_WIDGET_CHILD_ID = 55;
     private static final int STORM_INTENSITY_VARPLAYER_ID = -1;
     private static final int STORM_INTENSITY_VARBIT_ID = -1;
 
@@ -178,27 +178,44 @@ public class TemporossSoloTrackerPlugin extends Plugin
             return client.getVarpValue(STORM_INTENSITY_VARPLAYER_ID);
         }
 
-        // Widget fallback (parse something like "45%")
-        if (STORM_INTENSITY_WIDGET_GROUP_ID != -1 && STORM_INTENSITY_WIDGET_CHILD_ID != -1)
+        // Widget fallback (parse something like "Storm intensity: 86%")
+        if (STORM_INTENSITY_WIDGET_GROUP_ID != -1)
         {
-            Widget widget = client.getWidget(STORM_INTENSITY_WIDGET_GROUP_ID, STORM_INTENSITY_WIDGET_CHILD_ID);
-            if (widget != null)
+            // Primary child (verified)
+            int[] candidateChildren = new int[] {STORM_INTENSITY_WIDGET_CHILD_ID, 23};
+
+            for (int childId : candidateChildren)
             {
-                String text = widget.getText();
-                if (text != null)
+                if (childId == -1)
                 {
-                    text = text.replace("%", "").replaceAll("[^0-9]", "");
-                    if (!text.isEmpty())
-                    {
-                        try
-                        {
-                            return Integer.parseInt(text);
-                        }
-                        catch (NumberFormatException ignored)
-                        {
-                            // fall through
-                        }
-                    }
+                    continue;
+                }
+
+                Widget widget = client.getWidget(STORM_INTENSITY_WIDGET_GROUP_ID, childId);
+                if (widget == null)
+                {
+                    continue;
+                }
+
+                String text = widget.getText();
+                if (text == null)
+                {
+                    continue;
+                }
+
+                String digits = text.replace("%", "").replaceAll("[^0-9]", "");
+                if (digits.isEmpty())
+                {
+                    continue;
+                }
+
+                try
+                {
+                    return Integer.parseInt(digits);
+                }
+                catch (NumberFormatException ignored)
+                {
+                    // try next candidate
                 }
             }
         }
