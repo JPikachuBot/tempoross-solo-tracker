@@ -179,43 +179,26 @@ public class TemporossSoloTrackerPlugin extends Plugin
         }
 
         // Widget fallback (parse something like "Storm intensity: 86%")
-        if (STORM_INTENSITY_WIDGET_GROUP_ID != -1)
+        if (STORM_INTENSITY_WIDGET_GROUP_ID != -1 && STORM_INTENSITY_WIDGET_CHILD_ID != -1)
         {
-            // Primary child (verified)
-            int[] candidateChildren = new int[] {STORM_INTENSITY_WIDGET_CHILD_ID, 23};
-
-            for (int childId : candidateChildren)
+            Widget widget = client.getWidget(STORM_INTENSITY_WIDGET_GROUP_ID, STORM_INTENSITY_WIDGET_CHILD_ID);
+            if (widget != null)
             {
-                if (childId == -1)
-                {
-                    continue;
-                }
-
-                Widget widget = client.getWidget(STORM_INTENSITY_WIDGET_GROUP_ID, childId);
-                if (widget == null)
-                {
-                    continue;
-                }
-
                 String text = widget.getText();
-                if (text == null)
+                if (text != null)
                 {
-                    continue;
-                }
-
-                String digits = text.replace("%", "").replaceAll("[^0-9]", "");
-                if (digits.isEmpty())
-                {
-                    continue;
-                }
-
-                try
-                {
-                    return Integer.parseInt(digits);
-                }
-                catch (NumberFormatException ignored)
-                {
-                    // try next candidate
+                    String digits = text.replace("%", "").replaceAll("[^0-9]", "");
+                    if (!digits.isEmpty())
+                    {
+                        try
+                        {
+                            return Integer.parseInt(digits);
+                        }
+                        catch (NumberFormatException ignored)
+                        {
+                            // fall through
+                        }
+                    }
                 }
             }
         }
