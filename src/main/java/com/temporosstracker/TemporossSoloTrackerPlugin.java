@@ -10,7 +10,6 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
-import net.runelite.client.config.RuneLiteConfig;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -47,9 +46,6 @@ public class TemporossSoloTrackerPlugin extends Plugin
 
     @Inject
     private Notifier notifier;
-
-    @Inject
-    private RuneLiteConfig runeLiteConfig;
 
     @Inject
     private ConfigManager configManager;
@@ -157,18 +153,12 @@ public class TemporossSoloTrackerPlugin extends Plugin
         if (!wasStormAtOrAbove92 && atOrAbove)
         {
             String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
-            String chat = "<col=ff3d00>⚠ " + plain + "</col>";
 
-            // Notify using RuneLite's Notifier (same mechanism Idle Notifier uses).
-            // This respects the user's global notification settings (tray, sound, flash, focus, etc.).
+            // Match Idle Notifier behavior:
+            // - Call Notifier
+            // - Let Notifier decide whether to also emit an in-client CONSOLE message,
+            //   based on RuneLite notification settings.
             notifier.notify(plain);
-
-            // Optional in-client message: only print if the user enabled "Game message notifications".
-            // (This avoids chat spam for users who don't want in-client warning lines.)
-            if (runeLiteConfig != null && runeLiteConfig.enableGameMessageNotification())
-            {
-                client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", chat, null);
-            }
         }
 
         lastStormIntensity = stormIntensity;
