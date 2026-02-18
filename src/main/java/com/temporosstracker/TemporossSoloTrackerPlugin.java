@@ -36,9 +36,9 @@ public class TemporossSoloTrackerPlugin extends Plugin
     // Verified region ID (Jackson, 2026-02-17)
     private static final int TEMPOROSS_FIGHT_REGION_ID = 12076;
 
-    // Verified (Jackson, 2026-02-17): Tempoross HUD widgets are in group 437.
-    // The readable text (e.g. "Storm intensity: 86%") appears on child 55 (STORM_INTENSITY_TITLE).
-    private static final int STORM_INTENSITY_WIDGET_GROUP_ID = 437;
+    // Verified (Jackson, 2026-02-17): Tempoross HUD widgets are in group 435.
+    // The readable text (e.g. "Storm Intensity: 86%") appears on child 55 (STORM_INTENSITY_TITLE).
+    private static final int STORM_INTENSITY_WIDGET_GROUP_ID = 435;
     private static final int STORM_INTENSITY_WIDGET_CHILD_ID = 55;
     private static final int STORM_INTENSITY_VARPLAYER_ID = -1;
     private static final int STORM_INTENSITY_VARBIT_ID = -1;
@@ -65,6 +65,7 @@ public class TemporossSoloTrackerPlugin extends Plugin
     private boolean wasInFightRegion = false;
 
     private int lastStormIntensity = -1;
+    private boolean wasStormAtOrAboveThreshold = false;
 
     @Provides
     TemporossSoloTrackerConfig provideConfig(ConfigManager configManager)
@@ -83,6 +84,7 @@ public class TemporossSoloTrackerPlugin extends Plugin
         panel.setOnReset(() -> {
             persistState(trackerState);
             lastStormIntensity = -1;
+            wasStormAtOrAboveThreshold = false;
         });
 
         BufferedImage icon = ImageUtil.loadImageResource(getClass(), "icon.png");
@@ -137,6 +139,7 @@ public class TemporossSoloTrackerPlugin extends Plugin
         {
             // Leaving the fight clears warning state.
             lastStormIntensity = -1;
+            wasStormAtOrAboveThreshold = false;
         }
         wasInFightRegion = inFight;
 
@@ -171,23 +174,19 @@ public class TemporossSoloTrackerPlugin extends Plugin
         }
 
         int threshold = config.stormNotifyThreshold();
-        int previousIntensity = lastStormIntensity;
+        boolean atOrAbove = stormIntensity >= threshold;
         boolean fired = false;
 
-        // Fire on rising edge: previously below threshold, now at/above.
-        if (previousIntensity >= 0 && previousIntensity < threshold && stormIntensity >= threshold)
+        // Notify once each time we cross from below-threshold to at/above-threshold.
+        // This avoids spamming a notification every game tick while storm stays high.
+        if (!wasStormAtOrAboveThreshold && atOrAbove)
         {
             String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
-
-            // Match Idle Notifier behavior:
-            // - Call Notifier with a Notification config entry
-            // - Let Notifier decide whether to also emit an in-client CONSOLE message,
-            //   based on RuneLite notification settings.
-            Notification stormNotification = config.stormNotifyNotification();
-            notifier.notify(stormNotification, plain);
+            notifier.notify(config.stormNotifyNotification(), plain);
             fired = true;
         }
 
+        wasStormAtOrAboveThreshold = atOrAbove;
         lastStormIntensity = stormIntensity;
 
         if (config.stormNotifyDebug())
@@ -198,7 +197,7 @@ public class TemporossSoloTrackerPlugin extends Plugin
                 reading.rawText,
                 stormIntensity,
                 threshold,
-                previousIntensity,
+                lastStormIntensity,
                 fired
             );
         }
