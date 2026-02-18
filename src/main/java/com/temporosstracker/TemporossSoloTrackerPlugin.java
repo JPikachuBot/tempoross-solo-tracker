@@ -2,9 +2,7 @@ package com.temporosstracker;
 
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import javax.inject.Inject;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -59,8 +57,8 @@ public class TemporossSoloTrackerPlugin extends Plugin
 
     private boolean wasInFightRegion = false;
 
-    // Track which phases we've already warned in for the current fight.
-    private final Set<Integer> warnedPhasesThisFight = new HashSet<>();
+    private int lastStormIntensity = -1;
+    private boolean wasStormAtOrAbove92 = false;
 
     @Provides
     TemporossSoloTrackerConfig provideConfig(ConfigManager configManager)
@@ -78,7 +76,8 @@ public class TemporossSoloTrackerPlugin extends Plugin
         panel.setOnStateChange(this::persistState);
         panel.setOnReset(() -> {
             persistState(trackerState);
-            warnedPhasesThisFight.clear();
+            lastStormIntensity = -1;
+            wasStormAtOrAbove92 = false;
         });
 
         BufferedImage icon = ImageUtil.loadImageResource(getClass(), "icon.png");
@@ -93,7 +92,8 @@ public class TemporossSoloTrackerPlugin extends Plugin
 
         // Initialize region tracking so we don't auto-reset if the plugin is enabled mid-fight.
         wasInFightRegion = isInFightRegion();
-        warnedPhasesThisFight.clear();
+        lastStormIntensity = -1;
+        wasStormAtOrAbove92 = false;
     }
 
     @Override
@@ -123,7 +123,8 @@ public class TemporossSoloTrackerPlugin extends Plugin
         boolean inFight = isInFightRegion();
         if (config.autoReset() && inFight && !wasInFightRegion)
         {
-            warnedPhasesThisFight.clear();
+            lastStormIntensity = -1;
+            wasStormAtOrAbove92 = false;
             if (panel != null)
             {
                 panel.resetChecklist();
@@ -132,44 +133,31 @@ public class TemporossSoloTrackerPlugin extends Plugin
         else if (!inFight && wasInFightRegion)
         {
             // Leaving the fight clears warning state.
-            warnedPhasesThisFight.clear();
+            lastStormIntensity = -1;
+            wasStormAtOrAbove92 = false;
         }
         wasInFightRegion = inFight;
 
-        // --- Storm intensity warning (notify once per relevant phase) ---
-        if (!inFight || !config.notifyAt92() || panel == null)
-        {
-            return;
-        }
-
-        TrackerState trackerState = panel.getTrackerState();
-        int activeIndex = trackerState.getActiveStepIndex();
-        PhaseStep activeStep = trackerState.getStep(activeIndex);
-
-        int phaseNumber = activeStep.getPhaseNumber();
-
-        // Warn once per "cook" phase (not just when the active step happens to be the warning step).
-        // ChecklistDefinition uses phaseNumber=2 for Phase 2 and phaseNumber=4 for Phase 3.
-        if (phaseNumber != 2 && phaseNumber != 4)
-        {
-            return;
-        }
-
-        if (warnedPhasesThisFight.contains(phaseNumber))
+        // --- Storm intensity warning (edge-trigger at 92%) ---
+        // Notify each time storm crosses from <92% to >=92% (not continuously).
+        if (!inFight || !config.notifyAt92())
         {
             return;
         }
 
         int stormIntensity = readStormIntensityPercent();
-        if (stormIntensity < 92)
+        boolean atOrAbove = stormIntensity >= 92;
+
+        // Fire on rising edge: previously below threshold, now at/above.
+        if (!wasStormAtOrAbove92 && atOrAbove)
         {
-            return;
+            String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
+            String chat = "<col=ff3d00>⚠ " + plain + "</col>";
+            client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", chat, null);
         }
 
-        String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
-        String chat = "<col=ff3d00>⚠ " + plain + "</col>";
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", chat, null);
-        warnedPhasesThisFight.add(phaseNumber);
+        lastStormIntensity = stormIntensity;
+        wasStormAtOrAbove92 = atOrAbove;
     }
 
     private boolean isInFightRegion()
