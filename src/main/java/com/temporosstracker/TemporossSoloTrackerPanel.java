@@ -5,14 +5,12 @@ import java.awt.Color;
 import java.awt.Font;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-// import javax.swing.JScrollPane; // removed (no nested scrollbar)
-import javax.swing.JCheckBox;
 import javax.swing.border.EmptyBorder;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
@@ -29,8 +27,8 @@ public class TemporossSoloTrackerPanel extends PluginPanel
     private final JPanel content;
     private final TrackerState trackerState;
     private final List<StepRow> stepRows = new ArrayList<>();
+
     private Runnable onReset;
-    private Consumer<TrackerState> onStateChange;
 
     public TemporossSoloTrackerPanel()
     {
@@ -39,11 +37,7 @@ public class TemporossSoloTrackerPanel extends PluginPanel
 
     public TemporossSoloTrackerPanel(List<PhaseStep> checklist, TrackerState trackerState)
     {
-        TrackerState state = trackerState;
-        if (state == null)
-        {
-            state = TrackerState.fromChecklist(checklist);
-        }
+        TrackerState state = trackerState != null ? trackerState : TrackerState.fromChecklist(checklist);
         this.trackerState = state;
 
         setLayout(new BorderLayout());
@@ -68,23 +62,12 @@ public class TemporossSoloTrackerPanel extends PluginPanel
         updateActiveStepHighlight();
 
         // RuneLite already provides scrolling for sidebar panels.
-        // Adding our own JScrollPane causes nested/double scrollbars.
         add(content, BorderLayout.CENTER);
     }
 
     public void setOnReset(Runnable onReset)
     {
         this.onReset = onReset;
-    }
-
-    public void setOnStateChange(Consumer<TrackerState> onStateChange)
-    {
-        this.onStateChange = onStateChange;
-    }
-
-    public JButton getResetButton()
-    {
-        return resetButton;
     }
 
     /**
@@ -129,10 +112,6 @@ public class TemporossSoloTrackerPanel extends PluginPanel
             checkbox.addActionListener(event -> {
                 trackerState.setChecked(stepIndex, checkbox.isSelected());
                 updateActiveStepHighlight();
-                if (onStateChange != null)
-                {
-                    onStateChange.accept(trackerState);
-                }
             });
 
             stepRows.add(new StepRow(stepIndex, row, checkbox, step.getLabel(), checkbox.getFont(), step.isWarning()));
@@ -178,23 +157,20 @@ public class TemporossSoloTrackerPanel extends PluginPanel
         return true;
     }
 
-    private boolean isWarningStep(PhaseStep step)
-    {
-        return step.isWarning();
-    }
-
     private void updateActiveStepHighlight()
     {
         int activeIndex = trackerState.getActiveStepIndex();
         for (StepRow row : stepRows)
         {
-            boolean isActive = row.index == activeIndex;
+            boolean isActive = (activeIndex != -1) && row.index == activeIndex;
             row.panel.setBackground(isActive ? ACTIVE_STEP_COLOR : ColorScheme.DARK_GRAY_COLOR);
             row.panel.setOpaque(true);
+
             PhaseStep step = trackerState.getStep(row.index);
             boolean checked = step.isChecked();
             row.checkbox.setSelected(checked);
             row.checkbox.setText(formatLabel(row.labelText, checked));
+
             if (checked)
             {
                 row.checkbox.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
@@ -202,7 +178,6 @@ public class TemporossSoloTrackerPanel extends PluginPanel
             }
             else if (row.isWarning)
             {
-                // Keep same color as other steps; just bold to emphasize.
                 row.checkbox.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
                 row.checkbox.setFont(row.baseFont.deriveFont(Font.BOLD));
             }
@@ -254,8 +229,6 @@ public class TemporossSoloTrackerPanel extends PluginPanel
     {
         String safe = escapeHtml(labelText);
 
-        // HTML makes Swing wrap text for checkboxes/labels when given a width.
-        // Use a div width so long instructions don't run off the panel.
         if (!checked)
         {
             return "<html><div style='width:" + LABEL_WRAP_PX + "px'>" + safe + "</div></html>";

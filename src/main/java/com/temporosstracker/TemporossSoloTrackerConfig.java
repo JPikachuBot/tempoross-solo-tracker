@@ -31,19 +31,9 @@ public interface TemporossSoloTrackerConfig extends Config
     }
 
     @ConfigItem(
-        keyName = "stormNotifyDebug",
-        name = "Storm notify debug logging",
-        description = "Log storm intensity reads and notification checks (debug only)"
-    )
-    default boolean stormNotifyDebug()
-    {
-        return false;
-    }
-
-    @ConfigItem(
         keyName = "autoReset",
         name = "Auto reset",
-        description = "Auto-reset checkboxes on new Tempoross game"
+        description = "Auto-reset checkboxes when you return to the lobby"
     )
     default boolean autoReset()
     {
@@ -53,7 +43,7 @@ public interface TemporossSoloTrackerConfig extends Config
     @ConfigItem(
         keyName = "highlightCurrentStep",
         name = "Highlight current step",
-        description = "Highlight the next unchecked step"
+        description = "Highlight the active step"
     )
     default boolean highlightCurrentStep()
     {

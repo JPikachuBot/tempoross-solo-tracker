@@ -8,41 +8,42 @@ import java.util.regex.Pattern;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
-import net.runelite.client.config.Notification;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
+import net.runelite.client.util.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @PluginDescriptor(
     name = "Tempoross Solo Tracker",
-    description = "Interactive checklist for solo Tempoross runs",
+    description = "Interactive checklist + storm intensity notification for solo Tempoross",
     tags = {"tempoross", "minigame", "tracker", "checklist"}
 )
 public class TemporossSoloTrackerPlugin extends Plugin
 {
     private static final Logger log = LoggerFactory.getLogger(TemporossSoloTrackerPlugin.class);
 
-    private static final String CONFIG_GROUP = "tempoross-solo-tracker";
-    private static final String CHECKLIST_STATE_KEY = "checklistState";
+    // Shipping default: no debug logging. Keep the hooks so we can re-enable quickly later.
+    private static final boolean DEBUG = false;
 
-    // Verified region ID (Jackson, 2026-02-17)
-    private static final int TEMPOROSS_FIGHT_REGION_ID = 12076;
+    // Verified lobby/waiting area region ID (Jackson)
+    private static final int TEMPOROSS_LOBBY_REGION_ID = 12588;
 
-    // Verified (Jackson, 2026-02-17): Tempoross HUD widgets are in group 437.
-    // The readable text (e.g. "Storm Intensity: 86%") appears on child 55 (STORM_INTENSITY_TITLE).
+    // Verified: storm intensity text widget (Jackson)
     private static final int STORM_INTENSITY_WIDGET_GROUP_ID = 437;
     private static final int STORM_INTENSITY_WIDGET_CHILD_ID = 55;
-    private static final int STORM_INTENSITY_VARPLAYER_ID = -1;
-    private static final int STORM_INTENSITY_VARBIT_ID = -1;
     private static final Pattern STORM_INTENSITY_PATTERN = Pattern.compile("(\\d{1,3})");
+
+    private static final String SOLO_START_OPTION = "Solo-start";
+    private static final String SOLO_START_TARGET = "Rope ladder";
 
     @Inject
     private Client client;
@@ -54,18 +55,16 @@ public class TemporossSoloTrackerPlugin extends Plugin
     private Notifier notifier;
 
     @Inject
-    private ConfigManager configManager;
-
-    @Inject
     private TemporossSoloTrackerConfig config;
 
     private TemporossSoloTrackerPanel panel;
     private NavigationButton navButton;
 
-    private boolean wasInFightRegion = false;
+    // Solo-only gate: only true after the player clicks Solo-start on the boat.
+    private boolean soloRunActive = false;
 
+    private int lastRegionId = -1;
     private int lastStormIntensity = -1;
-    private boolean wasStormAtOrAboveThreshold = false;
 
     @Provides
     TemporossSoloTrackerConfig provideConfig(ConfigManager configManager)
@@ -77,14 +76,10 @@ public class TemporossSoloTrackerPlugin extends Plugin
     protected void startUp()
     {
         List<PhaseStep> checklist = ChecklistDefinition.createChecklist();
-        String serialized = configManager.getConfiguration(CONFIG_GROUP, CHECKLIST_STATE_KEY);
-        TrackerState trackerState = TrackerState.deserialize(serialized, checklist);
+        TrackerState trackerState = TrackerState.fromChecklist(checklist);
         panel = new TemporossSoloTrackerPanel(checklist, trackerState);
-        panel.setOnStateChange(this::persistState);
         panel.setOnReset(() -> {
-            persistState(trackerState);
             lastStormIntensity = -1;
-            wasStormAtOrAboveThreshold = false;
         });
 
         BufferedImage icon = ImageUtil.loadImageResource(getClass(), "icon.png");
@@ -97,8 +92,8 @@ public class TemporossSoloTrackerPlugin extends Plugin
 
         clientToolbar.addNavigation(navButton);
 
-        // Initialize region tracking so we don't auto-reset if the plugin is enabled mid-fight.
-        wasInFightRegion = isInFightRegion();
+        lastRegionId = getRegionIdSafe();
+        soloRunActive = false;
         lastStormIntensity = -1;
     }
 
@@ -111,134 +106,105 @@ public class TemporossSoloTrackerPlugin extends Plugin
             navButton = null;
         }
         panel = null;
+
+        soloRunActive = false;
+        lastRegionId = -1;
+        lastStormIntensity = -1;
     }
 
-    private void persistState(TrackerState state)
+    @Subscribe
+    public void onMenuOptionClicked(MenuOptionClicked e)
     {
-        if (state == null)
+        // Start tracking only for solo runs.
+        String opt = e.getMenuOption();
+        if (!SOLO_START_OPTION.equals(opt))
         {
             return;
         }
-        configManager.setConfiguration(CONFIG_GROUP, CHECKLIST_STATE_KEY, state.serialize());
+
+        String target = Text.removeTags(e.getMenuTarget());
+        if (!SOLO_START_TARGET.equals(target))
+        {
+            return;
+        }
+
+        soloRunActive = true;
+        lastStormIntensity = -1;
+
+        if (DEBUG)
+        {
+            log.debug("Solo-start clicked: action={} id={} p0={} p1={} regionId={}",
+                e.getMenuAction(), e.getId(), e.getParam0(), e.getParam1(), getRegionIdSafe());
+        }
     }
 
     @Subscribe
     public void onGameTick(GameTick event)
     {
-        // --- Auto-reset on entering fight region (new game) ---
-        boolean inFight = isInFightRegion();
-        if (config.autoReset() && inFight && !wasInFightRegion)
+        int regionId = getRegionIdSafe();
+
+        // Reset checklist ONLY when the player returns to the lobby region (game ended).
+        if (config.autoReset() && regionId == TEMPOROSS_LOBBY_REGION_ID && lastRegionId != TEMPOROSS_LOBBY_REGION_ID)
         {
+            soloRunActive = false;
             lastStormIntensity = -1;
             if (panel != null)
             {
                 panel.resetChecklist();
             }
         }
-        else if (!inFight && wasInFightRegion)
-        {
-            // Leaving the fight clears warning state.
-            lastStormIntensity = -1;
-            wasStormAtOrAboveThreshold = false;
-        }
-        wasInFightRegion = inFight;
+        lastRegionId = regionId;
 
-        // --- Storm intensity warning (edge-trigger at configured threshold) ---
-        // Notify each time storm crosses from below threshold to >= threshold (not continuously).
-        if (!inFight)
+        // Storm intensity notification: solo-only, fight-UI-only, and rising-edge like Idle Notifier.
+        if (!soloRunActive)
         {
-            if (config.stormNotifyDebug())
-            {
-                log.info("Storm notify debug: not in fight region (regionId={})", getRegionIdSafe());
-            }
             return;
         }
 
         StormIntensityReading reading = readStormIntensity();
-        int stormIntensity = reading.intensity;
-        if (stormIntensity < 0)
+        if (!reading.fightUiPresent)
         {
-            if (config.stormNotifyDebug())
+            return;
+        }
+
+        int intensity = reading.intensity;
+        if (intensity < 0)
+        {
+            if (DEBUG)
             {
-                log.info(
-                    "Storm notify debug: regionId={}, rawText='{}', parsedIntensity={}, threshold={}, lastIntensity={}, fired={}",
-                    getRegionIdSafe(),
-                    reading.rawText,
-                    stormIntensity,
-                    config.stormNotifyThreshold(),
-                    lastStormIntensity,
-                    false
-                );
+                log.debug("Storm notify debug: rawText='{}' parsed=-1 threshold={} lastIntensity={}",
+                    reading.rawText, config.stormNotifyThreshold(), lastStormIntensity);
             }
             return;
         }
 
         int threshold = config.stormNotifyThreshold();
-        boolean atOrAbove = stormIntensity >= threshold;
-        boolean fired = false;
-
-        // Notify once each time we cross from below-threshold to at/above-threshold.
-        // This avoids spamming a notification every game tick while storm stays high.
-        if (!wasStormAtOrAboveThreshold && atOrAbove)
+        boolean crossedUp = (lastStormIntensity < threshold) && (intensity >= threshold);
+        if (crossedUp)
         {
-            String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
-            notifier.notify(config.stormNotifyNotification(), plain);
-            fired = true;
+            notifier.notify(config.stormNotifyNotification(), "Storm intensity at " + intensity + "%");
         }
 
-        wasStormAtOrAboveThreshold = atOrAbove;
-        lastStormIntensity = stormIntensity;
-
-        if (config.stormNotifyDebug())
+        if (DEBUG)
         {
-            log.info(
-                "Storm notify debug: regionId={}, rawText='{}', parsedIntensity={}, threshold={}, lastIntensity={}, fired={}",
-                getRegionIdSafe(),
-                reading.rawText,
-                stormIntensity,
-                threshold,
-                lastStormIntensity,
-                fired
-            );
+            log.debug("Storm notify debug: intensity={} threshold={} lastIntensity={} fired={} rawText='{}'",
+                intensity, threshold, lastStormIntensity, crossedUp, reading.rawText);
         }
-    }
 
-    private boolean isInFightRegion()
-    {
-        if (client == null || client.getLocalPlayer() == null)
-        {
-            return false;
-        }
-        return client.getLocalPlayer().getWorldLocation().getRegionID() == TEMPOROSS_FIGHT_REGION_ID;
+        lastStormIntensity = intensity;
     }
 
     private StormIntensityReading readStormIntensity()
     {
-        String rawText = null;
-
-        // VarBit is preferred if known
-        if (STORM_INTENSITY_VARBIT_ID != -1)
+        Widget widget = client.getWidget(STORM_INTENSITY_WIDGET_GROUP_ID, STORM_INTENSITY_WIDGET_CHILD_ID);
+        if (widget == null)
         {
-            return new StormIntensityReading(client.getVarbitValue(STORM_INTENSITY_VARBIT_ID), rawText);
+            return new StormIntensityReading(-1, null, false);
         }
 
-        // VarPlayer fallback
-        if (STORM_INTENSITY_VARPLAYER_ID != -1)
-        {
-            return new StormIntensityReading(client.getVarpValue(STORM_INTENSITY_VARPLAYER_ID), rawText);
-        }
-
-        // Widget fallback (parse something like "Storm intensity: 86%")
-        if (STORM_INTENSITY_WIDGET_GROUP_ID != -1 && STORM_INTENSITY_WIDGET_CHILD_ID != -1)
-        {
-            Widget widget = client.getWidget(STORM_INTENSITY_WIDGET_GROUP_ID, STORM_INTENSITY_WIDGET_CHILD_ID);
-            if (widget != null)
-            {
-                rawText = widget.getText();
-            }
-        }
-
-        return new StormIntensityReading(parseStormIntensity(rawText), rawText);
+        String rawText = widget.getText();
+        int value = parseStormIntensity(rawText);
+        return new StormIntensityReading(value, rawText, true);
     }
 
     private int parseStormIntensity(String text)
@@ -278,11 +244,13 @@ public class TemporossSoloTrackerPlugin extends Plugin
     {
         private final int intensity;
         private final String rawText;
+        private final boolean fightUiPresent;
 
-        private StormIntensityReading(int intensity, String rawText)
+        private StormIntensityReading(int intensity, String rawText, boolean fightUiPresent)
         {
             this.intensity = intensity;
             this.rawText = rawText;
+            this.fightUiPresent = fightUiPresent;
         }
     }
 }

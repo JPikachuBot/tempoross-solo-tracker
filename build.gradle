@@ -6,8 +6,6 @@ group = 'com.temporosstracker'
 version = '0.1.0-SNAPSHOT'
 
 def runeliteVersion = project.findProperty('runeliteVersion') ?: 'latest.release'
-// Test harness main used to launch RuneLite with this plugin loaded.
-def pluginMainClass = 'com.temporosstracker.TemporossSoloTrackerPluginTest'
 
 repositories {
     mavenLocal()
@@ -23,38 +21,9 @@ repositories {
 dependencies {
     // Plugin compilation uses RuneLite client API, but we don't bundle it.
     compileOnly "net.runelite:client:${runeliteVersion}"
-
-    // For the local `gradlew run` task we *do* need RuneLite on the runtime classpath.
-    runtimeOnly "net.runelite:client:${runeliteVersion}"
-
-    testImplementation "net.runelite:client:${runeliteVersion}"
-    testImplementation "net.runelite:jshell:${runeliteVersion}"
-
-    testImplementation 'junit:junit:4.13.2'
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release.set(11)
-}
-
-tasks.test {
-    // This project uses src/test only as a RuneLite launcher harness (main method), not JUnit.
-    failOnNoDiscoveredTests = false
-}
-
-tasks.register('run', JavaExec) {
-    group = 'run'
-    description = 'Run the plugin in RuneLite (developer mode)'
-
-    // Important: RuneLite won't automatically load arbitrary plugins from the classpath.
-    // We launch through a small test harness (see src/test/...) that calls ExternalPluginManager.loadBuiltin.
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = pluginMainClass
-
-    args = ['--developer-mode', '--debug']
-
-    // RuneLite dev client expects assertions enabled.
-    // On modern Java (17+), RuneLite on macOS also needs access to com.apple.eawt.
-    jvmArgs '-ea', '--add-exports=java.desktop/com.apple.eawt=ALL-UNNAMED'
 }

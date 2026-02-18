@@ -4,10 +4,16 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * In-memory checklist state.
+ *
+ * Highlighting rule (per Jackson): highlight the step immediately after the
+ * lowest checked box, regardless of gaps above. If nothing is checked, highlight
+ * the first step. If all are checked, no active step.
+ */
 public class TrackerState
 {
     private final List<PhaseStep> steps;
-    private Integer lastToggledIndex;
 
     private TrackerState(List<PhaseStep> steps)
     {
@@ -16,27 +22,7 @@ public class TrackerState
 
     public static TrackerState fromChecklist(List<PhaseStep> checklist)
     {
-        return new TrackerState(copySteps(checklist, null));
-    }
-
-    public static TrackerState deserialize(String raw, List<PhaseStep> checklist)
-    {
-        List<Boolean> values = parseSerialized(raw, checklist.size());
-        return new TrackerState(copySteps(checklist, values));
-    }
-
-    public String serialize()
-    {
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < steps.size(); i++)
-        {
-            if (i > 0)
-            {
-                builder.append(',');
-            }
-            builder.append(steps.get(i).isChecked() ? '1' : '0');
-        }
-        return builder.toString();
+        return new TrackerState(copySteps(checklist));
     }
 
     public List<PhaseStep> getSteps()
@@ -58,37 +44,31 @@ public class TrackerState
         return steps.get(index);
     }
 
+    /**
+     * @return the active step index, or -1 if all steps are checked.
+     */
     public int getActiveStepIndex()
     {
-        if (lastToggledIndex != null)
+        int lastChecked = -1;
+        for (int i = 0; i < steps.size(); i++)
         {
-            int nextRequiredAfter = findNextUncheckedRequiredAfter(lastToggledIndex);
-            if (nextRequiredAfter != -1)
+            if (steps.get(i).isChecked())
             {
-                return nextRequiredAfter;
+                lastChecked = i;
             }
         }
 
-        int firstRequiredUnchecked = findFirstUncheckedRequired();
-        if (firstRequiredUnchecked != -1)
+        int next = lastChecked + 1;
+        if (next < 0)
         {
-            return firstRequiredUnchecked;
+            next = 0;
         }
-        return findFirstUncheckedOptional();
+        return next >= steps.size() ? -1 : next;
     }
 
     public void setChecked(int index, boolean checked)
     {
-        PhaseStep step = getStep(index);
-        step.setChecked(checked);
-        lastToggledIndex = index;
-    }
-
-    public void toggleStep(int index)
-    {
-        PhaseStep step = getStep(index);
-        step.setChecked(!step.isChecked());
-        lastToggledIndex = index;
+        getStep(index).setChecked(checked);
     }
 
     public void reset()
@@ -97,80 +77,13 @@ public class TrackerState
         {
             step.setChecked(false);
         }
-        lastToggledIndex = null;
     }
 
-    private int findFirstUncheckedRequired()
-    {
-        for (int i = 0; i < steps.size(); i++)
-        {
-            PhaseStep step = steps.get(i);
-            if (!step.isChecked() && !step.isOptional())
-            {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private int findFirstUncheckedOptional()
-    {
-        for (int i = 0; i < steps.size(); i++)
-        {
-            PhaseStep step = steps.get(i);
-            if (!step.isChecked() && step.isOptional())
-            {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private int findNextUncheckedRequiredAfter(int index)
-    {
-        for (int i = index + 1; i < steps.size(); i++)
-        {
-            PhaseStep step = steps.get(i);
-            if (!step.isChecked() && !step.isOptional())
-            {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private static List<Boolean> parseSerialized(String raw, int expectedSize)
-    {
-        if (raw == null || raw.trim().isEmpty())
-        {
-            return new ArrayList<>(Collections.nCopies(expectedSize, Boolean.FALSE));
-        }
-
-        String[] parts = raw.split(",");
-        List<Boolean> values = new ArrayList<>();
-        for (String part : parts)
-        {
-            String normalized = part.trim();
-            values.add("1".equals(normalized));
-        }
-
-        if (values.size() < expectedSize)
-        {
-            values.addAll(Collections.nCopies(expectedSize - values.size(), Boolean.FALSE));
-        }
-        else if (values.size() > expectedSize)
-        {
-            values = new ArrayList<>(values.subList(0, expectedSize));
-        }
-        return values;
-    }
-
-    private static List<PhaseStep> copySteps(List<PhaseStep> checklist, List<Boolean> checkedValues)
+    private static List<PhaseStep> copySteps(List<PhaseStep> checklist)
     {
         List<PhaseStep> copies = new ArrayList<>(checklist.size());
-        for (int i = 0; i < checklist.size(); i++)
+        for (PhaseStep source : checklist)
         {
-            PhaseStep source = checklist.get(i);
             PhaseStep copy = new PhaseStep(
                 source.getPhaseNumber(),
                 source.getPhaseName(),
@@ -179,10 +92,7 @@ public class TrackerState
                 source.isOptional(),
                 source.isWarning()
             );
-            if (checkedValues != null && i < checkedValues.size())
-            {
-                copy.setChecked(checkedValues.get(i));
-            }
+            copy.setChecked(source.isChecked());
             copies.add(copy);
         }
         return copies;
