@@ -10,6 +10,7 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.config.RuneLiteConfig;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -46,6 +47,9 @@ public class TemporossSoloTrackerPlugin extends Plugin
 
     @Inject
     private Notifier notifier;
+
+    @Inject
+    private RuneLiteConfig runeLiteConfig;
 
     @Inject
     private ConfigManager configManager;
@@ -153,14 +157,19 @@ public class TemporossSoloTrackerPlugin extends Plugin
         if (!wasStormAtOrAbove92 && atOrAbove)
         {
             String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
-
-            // In-client visibility: print to chat, but avoid triggering RuneLite "Game message notifications"
-            // (we're using Notifier for desktop notifications).
             String chat = "<col=ff3d00>⚠ " + plain + "</col>";
-            client.addChatMessage(ChatMessageType.CONSOLE, "", chat, null);
 
-            // Desktop notification: respects RuneLite global notification settings.
-            notifier.notify(plain);
+            // Respect user's RuneLite notification preferences:
+            // - If they enabled "Game message notifications", we emit a GAMEMESSAGE and let RuneLite handle flash/sound/tray.
+            // - Otherwise we call Notifier directly (which also respects RuneLite's global notification settings).
+            if (runeLiteConfig != null && runeLiteConfig.enableGameMessageNotification())
+            {
+                client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", chat, null);
+            }
+            else
+            {
+                notifier.notify(plain);
+            }
         }
 
         lastStormIntensity = stormIntensity;
