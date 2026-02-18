@@ -36,9 +36,9 @@ public class TemporossSoloTrackerPlugin extends Plugin
     // Verified region ID (Jackson, 2026-02-17)
     private static final int TEMPOROSS_FIGHT_REGION_ID = 12076;
 
-    // Verified (Jackson, 2026-02-17): Tempoross HUD widgets are in group 435.
+    // Verified (Jackson, 2026-02-17): Tempoross HUD widgets are in group 437.
     // The readable text (e.g. "Storm Intensity: 86%") appears on child 55 (STORM_INTENSITY_TITLE).
-    private static final int STORM_INTENSITY_WIDGET_GROUP_ID = 435;
+    private static final int STORM_INTENSITY_WIDGET_GROUP_ID = 437;
     private static final int STORM_INTENSITY_WIDGET_CHILD_ID = 55;
     private static final int STORM_INTENSITY_VARPLAYER_ID = -1;
     private static final int STORM_INTENSITY_VARBIT_ID = -1;
