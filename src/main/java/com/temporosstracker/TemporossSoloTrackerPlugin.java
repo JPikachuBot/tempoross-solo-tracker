@@ -144,6 +144,10 @@ public class TemporossSoloTrackerPlugin extends Plugin
         // Notify each time storm crosses from below threshold to >= threshold (not continuously).
         if (!inFight)
         {
+            if (config.stormNotifyDebug())
+            {
+                log.info("Storm notify debug: not in fight region (regionId={})", getRegionIdSafe());
+            }
             return;
         }
 
@@ -153,7 +157,7 @@ public class TemporossSoloTrackerPlugin extends Plugin
         {
             if (config.stormNotifyDebug())
             {
-                log.debug(
+                log.info(
                     "Storm notify debug: regionId={}, rawText='{}', parsedIntensity={}, threshold={}, lastIntensity={}, fired={}",
                     getRegionIdSafe(),
                     reading.rawText,
@@ -188,7 +192,7 @@ public class TemporossSoloTrackerPlugin extends Plugin
 
         if (config.stormNotifyDebug())
         {
-            log.debug(
+            log.info(
                 "Storm notify debug: regionId={}, rawText='{}', parsedIntensity={}, threshold={}, lastIntensity={}, fired={}",
                 getRegionIdSafe(),
                 reading.rawText,
