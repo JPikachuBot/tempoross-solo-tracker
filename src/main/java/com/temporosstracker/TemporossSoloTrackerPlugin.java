@@ -3,18 +3,23 @@ package com.temporosstracker;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.config.Notification;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @PluginDescriptor(
     name = "Tempoross Solo Tracker",
@@ -23,6 +28,8 @@ import net.runelite.client.util.ImageUtil;
 )
 public class TemporossSoloTrackerPlugin extends Plugin
 {
+    private static final Logger log = LoggerFactory.getLogger(TemporossSoloTrackerPlugin.class);
+
     private static final String CONFIG_GROUP = "tempoross-solo-tracker";
     private static final String CHECKLIST_STATE_KEY = "checklistState";
 
@@ -36,6 +43,7 @@ public class TemporossSoloTrackerPlugin extends Plugin
     private static final int STORM_INTENSITY_WIDGET_CHILD_ID = 55;
     private static final int STORM_INTENSITY_VARPLAYER_ID = -1;
     private static final int STORM_INTENSITY_VARBIT_ID = -1;
+    private static final Pattern STORM_INTENSITY_PATTERN = Pattern.compile("(\\d{1,3})");
 
     @Inject
     private Client client;
@@ -135,32 +143,62 @@ public class TemporossSoloTrackerPlugin extends Plugin
 
         // --- Storm intensity warning (edge-trigger at configured threshold) ---
         // Notify each time storm crosses from below threshold to >= threshold (not continuously).
-        if (!inFight || !config.notifyAt92())
+        if (!inFight)
         {
             return;
         }
 
-        int stormIntensity = readStormIntensityPercent();
+        StormIntensityReading reading = readStormIntensity();
+        int stormIntensity = reading.intensity;
         if (stormIntensity < 0)
         {
+            if (config.stormNotifyDebug())
+            {
+                log.debug(
+                    "Storm notify debug: regionId={}, rawText='{}', parsedIntensity={}, threshold={}, lastIntensity={}, fired={}",
+                    getRegionIdSafe(),
+                    reading.rawText,
+                    stormIntensity,
+                    config.stormNotifyThreshold(),
+                    lastStormIntensity,
+                    false
+                );
+            }
             return;
         }
 
         int threshold = config.stormNotifyThreshold();
+        int previousIntensity = lastStormIntensity;
+        boolean fired = false;
 
         // Fire on rising edge: previously below threshold, now at/above.
-        if (lastStormIntensity >= 0 && lastStormIntensity < threshold && stormIntensity >= threshold)
+        if (previousIntensity >= 0 && previousIntensity < threshold && stormIntensity >= threshold)
         {
             String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
 
             // Match Idle Notifier behavior:
-            // - Call Notifier
+            // - Call Notifier with a Notification config entry
             // - Let Notifier decide whether to also emit an in-client CONSOLE message,
             //   based on RuneLite notification settings.
-            notifier.notify(plain);
+            Notification stormNotification = config.stormNotifyNotification();
+            notifier.notify(stormNotification, plain);
+            fired = true;
         }
 
         lastStormIntensity = stormIntensity;
+
+        if (config.stormNotifyDebug())
+        {
+            log.debug(
+                "Storm notify debug: regionId={}, rawText='{}', parsedIntensity={}, threshold={}, lastIntensity={}, fired={}",
+                getRegionIdSafe(),
+                reading.rawText,
+                stormIntensity,
+                threshold,
+                previousIntensity,
+                fired
+            );
+        }
     }
 
     private boolean isInFightRegion()
@@ -172,21 +210,20 @@ public class TemporossSoloTrackerPlugin extends Plugin
         return client.getLocalPlayer().getWorldLocation().getRegionID() == TEMPOROSS_FIGHT_REGION_ID;
     }
 
-    /**
-     * Returns storm intensity percent, or -1 if not yet wired.
-     */
-    private int readStormIntensityPercent()
+    private StormIntensityReading readStormIntensity()
     {
+        String rawText = null;
+
         // VarBit is preferred if known
         if (STORM_INTENSITY_VARBIT_ID != -1)
         {
-            return client.getVarbitValue(STORM_INTENSITY_VARBIT_ID);
+            return new StormIntensityReading(client.getVarbitValue(STORM_INTENSITY_VARBIT_ID), rawText);
         }
 
         // VarPlayer fallback
         if (STORM_INTENSITY_VARPLAYER_ID != -1)
         {
-            return client.getVarpValue(STORM_INTENSITY_VARPLAYER_ID);
+            return new StormIntensityReading(client.getVarpValue(STORM_INTENSITY_VARPLAYER_ID), rawText);
         }
 
         // Widget fallback (parse something like "Storm intensity: 86%")
@@ -195,25 +232,55 @@ public class TemporossSoloTrackerPlugin extends Plugin
             Widget widget = client.getWidget(STORM_INTENSITY_WIDGET_GROUP_ID, STORM_INTENSITY_WIDGET_CHILD_ID);
             if (widget != null)
             {
-                String text = widget.getText();
-                if (text != null)
-                {
-                    String digits = text.replace("%", "").replaceAll("[^0-9]", "");
-                    if (!digits.isEmpty())
-                    {
-                        try
-                        {
-                            return Integer.parseInt(digits);
-                        }
-                        catch (NumberFormatException ignored)
-                        {
-                            // fall through
-                        }
-                    }
-                }
+                rawText = widget.getText();
             }
         }
 
-        return -1;
+        return new StormIntensityReading(parseStormIntensity(rawText), rawText);
+    }
+
+    private int parseStormIntensity(String text)
+    {
+        if (text == null)
+        {
+            return -1;
+        }
+
+        Matcher matcher = STORM_INTENSITY_PATTERN.matcher(text);
+        if (!matcher.find())
+        {
+            return -1;
+        }
+
+        try
+        {
+            int value = Integer.parseInt(matcher.group(1));
+            return value >= 0 && value <= 100 ? value : -1;
+        }
+        catch (NumberFormatException ignored)
+        {
+            return -1;
+        }
+    }
+
+    private int getRegionIdSafe()
+    {
+        if (client == null || client.getLocalPlayer() == null)
+        {
+            return -1;
+        }
+        return client.getLocalPlayer().getWorldLocation().getRegionID();
+    }
+
+    private static final class StormIntensityReading
+    {
+        private final int intensity;
+        private final String rawText;
+
+        private StormIntensityReading(int intensity, String rawText)
+        {
+            this.intensity = intensity;
+            this.rawText = rawText;
+        }
     }
 }
