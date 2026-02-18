@@ -33,8 +33,7 @@ public class TemporossSoloTrackerPlugin extends Plugin
     private static final String CONFIG_GROUP = "tempoross-solo-tracker";
     private static final String CHECKLIST_STATE_KEY = "checklistState";
 
-    // Verified region IDs (Jackson, 2026-02-17)
-    private static final int TEMPOROSS_LOBBY_REGION_ID = 12588;
+    // Verified region ID (Jackson, 2026-02-17)
     private static final int TEMPOROSS_FIGHT_REGION_ID = 12076;
 
     // Verified (Jackson, 2026-02-17): Tempoross HUD widgets are in group 437.

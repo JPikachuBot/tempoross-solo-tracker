@@ -41,16 +41,6 @@ public interface TemporossSoloTrackerConfig extends Config
     }
 
     @ConfigItem(
-        keyName = "notifyCooldownTicks",
-        name = "Notify cooldown (ticks)",
-        description = "Ticks between repeated 92% warnings"
-    )
-    default int notifyCooldownTicks()
-    {
-        return 5;
-    }
-
-    @ConfigItem(
         keyName = "autoReset",
         name = "Auto reset",
         description = "Auto-reset checkboxes on new Tempoross game"
