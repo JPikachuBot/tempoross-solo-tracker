@@ -146,13 +146,15 @@ public class TemporossSoloTrackerPlugin extends Plugin
         int activeIndex = trackerState.getActiveStepIndex();
         PhaseStep activeStep = trackerState.getStep(activeIndex);
 
-        // Only warn on the specific checklist steps marked as warning steps.
-        if (!activeStep.isWarning())
+        int phaseNumber = activeStep.getPhaseNumber();
+
+        // Warn once per "cook" phase (not just when the active step happens to be the warning step).
+        // ChecklistDefinition uses phaseNumber=2 for Phase 2 and phaseNumber=4 for Phase 3.
+        if (phaseNumber != 2 && phaseNumber != 4)
         {
             return;
         }
 
-        int phaseNumber = activeStep.getPhaseNumber();
         if (warnedPhasesThisFight.contains(phaseNumber))
         {
             return;
