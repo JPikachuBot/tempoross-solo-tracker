@@ -4,7 +4,6 @@ import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.util.List;
 import javax.inject.Inject;
-import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.widgets.Widget;
@@ -59,7 +58,6 @@ public class TemporossSoloTrackerPlugin extends Plugin
     private boolean wasInFightRegion = false;
 
     private int lastStormIntensity = -1;
-    private boolean wasStormAtOrAbove92 = false;
 
     @Provides
     TemporossSoloTrackerConfig provideConfig(ConfigManager configManager)
@@ -78,7 +76,6 @@ public class TemporossSoloTrackerPlugin extends Plugin
         panel.setOnReset(() -> {
             persistState(trackerState);
             lastStormIntensity = -1;
-            wasStormAtOrAbove92 = false;
         });
 
         BufferedImage icon = ImageUtil.loadImageResource(getClass(), "icon.png");
@@ -94,7 +91,6 @@ public class TemporossSoloTrackerPlugin extends Plugin
         // Initialize region tracking so we don't auto-reset if the plugin is enabled mid-fight.
         wasInFightRegion = isInFightRegion();
         lastStormIntensity = -1;
-        wasStormAtOrAbove92 = false;
     }
 
     @Override
@@ -125,7 +121,6 @@ public class TemporossSoloTrackerPlugin extends Plugin
         if (config.autoReset() && inFight && !wasInFightRegion)
         {
             lastStormIntensity = -1;
-            wasStormAtOrAbove92 = false;
             if (panel != null)
             {
                 panel.resetChecklist();
@@ -135,22 +130,26 @@ public class TemporossSoloTrackerPlugin extends Plugin
         {
             // Leaving the fight clears warning state.
             lastStormIntensity = -1;
-            wasStormAtOrAbove92 = false;
         }
         wasInFightRegion = inFight;
 
-        // --- Storm intensity warning (edge-trigger at 92%) ---
-        // Notify each time storm crosses from <92% to >=92% (not continuously).
+        // --- Storm intensity warning (edge-trigger at configured threshold) ---
+        // Notify each time storm crosses from below threshold to >= threshold (not continuously).
         if (!inFight || !config.notifyAt92())
         {
             return;
         }
 
         int stormIntensity = readStormIntensityPercent();
-        boolean atOrAbove = stormIntensity >= 92;
+        if (stormIntensity < 0)
+        {
+            return;
+        }
+
+        int threshold = config.stormNotifyThreshold();
 
         // Fire on rising edge: previously below threshold, now at/above.
-        if (!wasStormAtOrAbove92 && atOrAbove)
+        if (lastStormIntensity >= 0 && lastStormIntensity < threshold && stormIntensity >= threshold)
         {
             String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
 
@@ -162,7 +161,6 @@ public class TemporossSoloTrackerPlugin extends Plugin
         }
 
         lastStormIntensity = stormIntensity;
-        wasStormAtOrAbove92 = atOrAbove;
     }
 
     private boolean isInFightRegion()

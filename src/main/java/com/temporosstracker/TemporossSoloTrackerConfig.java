@@ -3,18 +3,30 @@ package com.temporosstracker;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.Range;
 
 @ConfigGroup("temporossSoloTracker")
 public interface TemporossSoloTrackerConfig extends Config
 {
     @ConfigItem(
         keyName = "notifyAt92",
-        name = "Notify at 92%",
-        description = "Enable/disable 92% storm intensity notification"
+        name = "Storm notify enabled",
+        description = "Enable/disable storm intensity notifications"
     )
     default boolean notifyAt92()
     {
         return true;
+    }
+
+    @Range(min = 1, max = 99)
+    @ConfigItem(
+        keyName = "stormNotifyThreshold",
+        name = "Storm notify threshold (%)",
+        description = "Storm intensity threshold for notification"
+    )
+    default int stormNotifyThreshold()
+    {
+        return 92;
     }
 
     @ConfigItem(
