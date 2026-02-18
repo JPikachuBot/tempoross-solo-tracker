@@ -159,16 +159,15 @@ public class TemporossSoloTrackerPlugin extends Plugin
             String plain = "Storm at " + stormIntensity + "%, fill the cannon!";
             String chat = "<col=ff3d00>⚠ " + plain + "</col>";
 
-            // Respect user's RuneLite notification preferences:
-            // - If they enabled "Game message notifications", we emit a GAMEMESSAGE and let RuneLite handle flash/sound/tray.
-            // - Otherwise we call Notifier directly (which also respects RuneLite's global notification settings).
+            // Notify using RuneLite's Notifier (same mechanism Idle Notifier uses).
+            // This respects the user's global notification settings (tray, sound, flash, focus, etc.).
+            notifier.notify(plain);
+
+            // Optional in-client message: only print if the user enabled "Game message notifications".
+            // (This avoids chat spam for users who don't want in-client warning lines.)
             if (runeLiteConfig != null && runeLiteConfig.enableGameMessageNotification())
             {
                 client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", chat, null);
-            }
-            else
-            {
-                notifier.notify(plain);
             }
         }
 
